@@ -572,7 +572,7 @@ let activeSlices = []; // slice array built from activePrizes
 // STATE
 // ═══════════════════════════════════
 let who = '';       // 'self' | 'parent'
-let mode = '';      // 'self' | 'ref'
+let mode = 'self';  // always 'self' — referral removed
 let interest = '';  // 'pathway' | 'training'
 let hist = [];
 let phones = JSON.parse(localStorage.getItem('mati_phones') || '[]');
@@ -658,19 +658,11 @@ function buildOptions(selectId) {
     TRAINING.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; og2.appendChild(o); });
     sel.appendChild(og2);
   }
-  // Always show all for friend/referred sections
-  if (selectId.includes('rf-') || selectId.includes('prf-')) {
-    sel.innerHTML = '<option value="">Select one</option>';
-    const og1 = document.createElement('optgroup'); og1.label = '── Pathway Programmes ──';
-    PATHWAY.forEach(p => { const o = document.createElement('option'); o.value=p; o.textContent=p; og1.appendChild(o); });
-    const og2 = document.createElement('optgroup'); og2.label = '── Training Courses ──';
-    TRAINING.forEach(t => { const o = document.createElement('option'); o.value=t; o.textContent=t; og2.appendChild(o); });
-    sel.appendChild(og1); sel.appendChild(og2);
-  }
+
 }
 
 function populateDropdowns() {
-  ['s-prog','p-prog','rf-prog','prf-prog'].forEach(buildOptions);
+  ['s-prog','p-prog'].forEach(buildOptions);
 }
 
 // ═══════════════════════════════════
@@ -726,16 +718,7 @@ function submitForm() {
     if (phones.includes(phone)) { showDuplicateScreen(); return; }
   }
 
-  if (who === 'self' && mode === 'ref') {
-    ok &= v('r-name','e-r-name', x => x.length > 1);
-    ok &= v('r-email','e-r-email', isEmail);
-    ok &= v('r-phone','e-r-phone', isPhone);
-    ok &= v('rf-name','e-rf-name', x => x.length > 1);
-    ok &= v('rf-email','e-rf-email', isEmail);
-    ok &= v('rf-phone','e-rf-phone', isPhone);
-    ok &= v('rf-prog','e-rf-prog', x => x !== '');
 
-  }
 
   if (who === 'parent' && mode === 'self') {
     ok &= v('p-name','e-p-name', x => x.length > 1);
@@ -748,16 +731,7 @@ function submitForm() {
     if (phones.includes(phone)) { showDuplicateScreen(); return; }
   }
 
-  if (who === 'parent' && mode === 'ref') {
-    ok &= v('pr-name','e-pr-name', x => x.length > 1);
-    ok &= v('pr-phone','e-pr-phone', isPhone);
-    ok &= v('pr-email','e-pr-email', isEmail);
-    ok &= v('prf-cname','e-prf-cname', x => x.length > 1);
-    ok &= v('prf-cemail','e-prf-cemail', isEmail);
-    ok &= v('prf-cphone','e-prf-cphone', isPhone);
-    ok &= v('prf-prog','e-prf-prog', x => x !== '');
 
-  }
 
   ok &= vCheck('f-consent','e-consent');
   if (!ok) return;
@@ -790,12 +764,7 @@ function submitForm() {
       primary.guardianPhone = '';
       primary.guardianEmail = '';
     }
-    primary.referrerName  = '';
-    primary.referrerPhone = '';
-    primary.referrerEmail = '';
   }
-
-
 
   if (who==='parent' && mode==='self') {
     // Enrollee = the child
@@ -808,12 +777,7 @@ function submitForm() {
     primary.guardianName  = g('p-name');
     primary.guardianPhone = g('p-phone');
     primary.guardianEmail = g('p-email');
-    primary.referrerName  = '';
-    primary.referrerPhone = '';
-    primary.referrerEmail = '';
   }
-
-
 
   // Send to Google Sheets via URL-encoded POST
   // Use a readable fetch so we can get the raffle code back
@@ -825,42 +789,51 @@ function submitForm() {
   params.append('who', who);
   params.append('mode', mode);
 
-  fetch(SCRIPT_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: params.toString()
-  })
-  .then(r => r.text())
-  .then(text => {
-    document.getElementById('loader').classList.remove('show');
-    try {
-      // Strip HTML tags — Apps Script wraps response in HTML
-      const json = text.replace(/<[^>]+>/g,'').trim();
-      const data = JSON.parse(json);
+  // Step 1 — Check duplicate via GET (readable, no CORS issues)
+  // Step 2 — If not duplicate, POST data via no-cors (write-only, always works)
+  // Step 3 — Proceed to wheel
+  const checkUrl = SCRIPT_URL
+    + '?action=checkDuplicate'
+    + '&token=' + encodeURIComponent(SECRET_TOKEN)
+    + '&phone=' + encodeURIComponent(phone)
+    + '&who='   + encodeURIComponent(who);
+
+  fetch(checkUrl)
+    .then(r => r.json())
+    .then(data => {
       if (data.status === 'duplicate') {
-        showDuplicateScreen(); return;
+        document.getElementById('loader').classList.remove('show');
+        showDuplicateScreen();
+        return;
       }
-      if (data.raffleCode) {
-        currentRaffleCode = data.raffleCode;
-      }
-    } catch(e) {
-      // Parse failed — proceed anyway, spin result validation skipped
-      currentRaffleCode = '';
-    }
-    // Lock phone locally and proceed to wheel
-    phones.push(phone);
-    localStorage.setItem('mati_phones', JSON.stringify(phones));
-    localStorage.setItem('mati_count', String(count));
-    afterSubmit(primary.enrolleeName || primary.guardianName || '', phone);
-  })
-  .catch(() => {
-    // Network error — proceed anyway so no one is left stuck at the event
-    document.getElementById('loader').classList.remove('show');
-    currentRaffleCode = '';
-    phones.push(phone);
-    localStorage.setItem('mati_phones', JSON.stringify(phones));
-    afterSubmit(primary.enrolleeName || primary.guardianName || '', phone);
-  });
+      // Not a duplicate — fire the POST (no-cors, write-only)
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+      }).catch(() => {});
+      // Proceed immediately — no-cors confirms delivery
+      document.getElementById('loader').classList.remove('show');
+      phones.push(phone);
+      localStorage.setItem('mati_phones', JSON.stringify(phones));
+      localStorage.setItem('mati_count', String(count));
+      afterSubmit(primary.enrolleeName || primary.guardianName || '', phone);
+    })
+    .catch(() => {
+      // GET failed (offline?) — skip duplicate check, post anyway
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: params.toString()
+      }).catch(() => {});
+      document.getElementById('loader').classList.remove('show');
+      phones.push(phone);
+      localStorage.setItem('mati_phones', JSON.stringify(phones));
+      localStorage.setItem('mati_count', String(count));
+      afterSubmit(primary.enrolleeName || primary.guardianName || '', phone);
+    });
 }
 
 function showDuplicateScreen() {
@@ -892,12 +865,7 @@ function afterSubmit(name, phone) {
 
 // ── LOAD PRIZE DATA FROM SHEET ──
 function loadPrizeData(callback) {
-  const fd = new FormData();
-  fd.append('action', 'getPrizes');
-  fd.append('token', SECRET_TOKEN);
-  fetch(SCRIPT_URL, { method:'POST', body:fd, mode:'no-cors' })
-    .catch(() => {});
-  // Since no-cors blocks reading — use a GET request instead for prize data
+  // Use GET to fetch prize data — readable without CORS issues
   const url = SCRIPT_URL + '?action=getPrizes&token=' + SECRET_TOKEN;
   fetch(url)
     .then(r => r.json())
@@ -968,8 +936,11 @@ function interleaveSlices(arr) {
   sorted.forEach(prize => {
     let c = counts[prize];
     while (c-- > 0) {
-      while (result[pos % arr.length] !== -1) pos++;
-      result[pos % arr.length] = parseInt(prize);
+      let safety = 0;
+      while (result[pos % arr.length] !== -1 && safety++ < arr.length) pos++;
+      if (result[pos % arr.length] === -1) {
+        result[pos % arr.length] = parseInt(prize);
+      }
       pos += Math.floor(arr.length / counts[prize]) || 1;
     }
   });
@@ -1128,10 +1099,10 @@ function sendSpinResult(prizeName) {
   params.append('raffleCode', currentRaffleCode);
   fetch(SCRIPT_URL, {
     method: 'POST',
+    mode: 'no-cors',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString()
   }).catch(() => {});
-  // Clear code after use — one spin per submission
   currentRaffleCode = '';
 }
 
