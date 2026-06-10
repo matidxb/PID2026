@@ -802,8 +802,6 @@ function submitForm() {
   params.append('token', SECRET_TOKEN);
   params.append('who', who);
   params.append('mode', mode);
-  // Send prize config so Apps Script uses same values as HTML
-  params.append('prizeConfig', JSON.stringify(DEFAULT_PRIZE_DATA));
 
   // Lock submission — prevent double tap / double POST
   submitting = true;
@@ -1067,24 +1065,17 @@ function spinWheel() {
 
 // ── SEND SPIN RESULT TO SHEET (decrements stock) ──
 function sendSpinResult(prizeName) {
-  // Only send if we have a valid raffle code — prevents stock manipulation
-  if (!currentRaffleCode) {
-    console.warn('MATI: no raffle code — spin result not recorded');
-    return;
-  }
+  // Fire and forget — decrement stock in sheet
   const params = new URLSearchParams();
   params.append('action', 'recordSpin');
   params.append('token', SECRET_TOKEN);
   params.append('prize', prizeName);
-  params.append('raffleCode', currentRaffleCode);
-  params.append('prizeConfig', JSON.stringify(DEFAULT_PRIZE_DATA));
   fetch(SCRIPT_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: params.toString()
   }).catch(() => {});
-  currentRaffleCode = '';
 }
 
 function showResult() {
