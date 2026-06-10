@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>MATI — PH Independence Day 2026</title>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;900&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
@@ -627,8 +628,9 @@ function setInterest(val) {
 function goToForm() {
   if (!interest) return;
   // Show correct block
-  ['blk-self','blk-self-ref','blk-parent-self','blk-parent-ref'].forEach(id => {
-    document.getElementById(id).style.display = 'none';
+  ['blk-self','blk-parent-self'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = 'none';
   });
   if (who === 'self')   document.getElementById('blk-self').style.display = 'block';
   if (who === 'parent') document.getElementById('blk-parent-self').style.display = 'block';
@@ -949,10 +951,14 @@ function buildActiveSlices() {
   );
   const totalW = weights.reduce((a,b) => a+b, 0) || 1;
   // Give extra slices to highest weight prizes first
-  const sorted = activePrizes.map((p,i) => ({ i, w: weights[i] }))
+  const sorted = activePrizes
+    .map((p,i) => ({ i, w: weights[i] || 1 }))
+    .filter(x => x !== undefined)
     .sort((a,b) => b.w - a.w);
-  for (let s = 0; s < remaining; s++) {
-    sliceCounts[sorted[s % sorted.length].i]++;
+  if (sorted.length > 0) {
+    for (let s = 0; s < remaining; s++) {
+      sliceCounts[sorted[s % sorted.length].i]++;
+    }
   }
   // Build flat slice array
   activeSlices = [];
@@ -1203,12 +1209,13 @@ function resetApp() {
 // Draw wheel on load
 window.addEventListener('load', () => {
   // Draw a default wheel on load so wheel screen isn't blank
-  activePrizes = ALL_PRIZES.map((name, i) => ({
+  prizeData = ALL_PRIZES.map((name, i) => ({
     name,
     pathwayWeight:  [20,40,40,0,0][i],
     trainingWeight: [0,20,20,30,30][i],
     stock: 99, threshold: 3
   }));
+  activePrizes = prizeData.slice();
   buildActiveSlices();
   drawWheel(0);
 });
