@@ -802,6 +802,8 @@ function submitForm() {
   params.append('token', SECRET_TOKEN);
   params.append('who', who);
   params.append('mode', mode);
+  // Send prize config so Apps Script uses same values as HTML
+  params.append('prizeConfig', JSON.stringify(DEFAULT_PRIZE_DATA));
 
   // Lock submission — prevent double tap / double POST
   submitting = true;
@@ -1075,6 +1077,7 @@ function sendSpinResult(prizeName) {
   params.append('token', SECRET_TOKEN);
   params.append('prize', prizeName);
   params.append('raffleCode', currentRaffleCode);
+  params.append('prizeConfig', JSON.stringify(DEFAULT_PRIZE_DATA));
   fetch(SCRIPT_URL, {
     method: 'POST',
     mode: 'no-cors',
