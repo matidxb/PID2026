@@ -562,9 +562,19 @@ const PRIZE_COLORS = {
   'Mug':'#2c2c2c',        'Pen':'#3a3a3a', 'Chocolate':'#1a1a1a'
 };
 
-// Dynamic prize state — loaded from Google Sheet before each spin
-// Format: { name, pathwayWeight, trainingWeight, stock, threshold }
-let prizeData = [];
+// ── PRIZE DATA — edit stock here before the event ──
+// pathwayWeight / trainingWeight: chance weighting per interest type
+// stock: how many of this prize you have physically
+// threshold: when stock hits this number, prize is removed from wheel
+const DEFAULT_PRIZE_DATA = [
+  { name:'Goodie Bag', pathwayWeight:20, trainingWeight:0,  stock:10, threshold:3 },
+  { name:'Notebook',   pathwayWeight:40, trainingWeight:20, stock:20, threshold:3 },
+  { name:'Mug',        pathwayWeight:40, trainingWeight:20, stock:20, threshold:3 },
+  { name:'Pen',        pathwayWeight:0,  trainingWeight:30, stock:25, threshold:3 },
+  { name:'Chocolate',  pathwayWeight:0,  trainingWeight:30, stock:25, threshold:3 }
+];
+
+let prizeData    = DEFAULT_PRIZE_DATA.map(p => ({ ...p })); // working copy
 let activePrizes = []; // prizes above threshold
 let activeSlices = []; // slice array built from activePrizes
 
@@ -580,6 +590,7 @@ let count  = parseInt(localStorage.getItem('mati_count') || '0');
 let wonPrize = '';
 let wheelSpun = false;
 let currentRaffleCode = ''; // set server-side, used to validate spin result
+let submitting = false; // prevents double submission
 
 // ═══════════════════════════════════
 // NAVIGATION
@@ -698,6 +709,9 @@ function isEmail(val) { return val.includes('@') && val.includes('.'); }
 // FORM SUBMIT
 // ═══════════════════════════════════
 function submitForm() {
+  if (submitting) return; // prevent double tap
+  const btn = document.getElementById('submitBtn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
   clearErrs();
   let ok = true;
   let phone = '';
@@ -789,51 +803,29 @@ function submitForm() {
   params.append('who', who);
   params.append('mode', mode);
 
-  // Step 1 — Check duplicate via GET (readable, no CORS issues)
-  // Step 2 — If not duplicate, POST data via no-cors (write-only, always works)
-  // Step 3 — Proceed to wheel
-  const checkUrl = SCRIPT_URL
-    + '?action=checkDuplicate'
-    + '&token=' + encodeURIComponent(SECRET_TOKEN)
-    + '&phone=' + encodeURIComponent(phone)
-    + '&who='   + encodeURIComponent(who);
+  // Lock submission — prevent double tap / double POST
+  submitting = true;
+  document.getElementById('loader').classList.add('show');
 
-  fetch(checkUrl)
-    .then(r => r.json())
-    .then(data => {
-      if (data.status === 'duplicate') {
-        document.getElementById('loader').classList.remove('show');
-        showDuplicateScreen();
-        return;
-      }
-      // Not a duplicate — fire the POST (no-cors, write-only)
-      fetch(SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      }).catch(() => {});
-      // Proceed immediately — no-cors confirms delivery
-      document.getElementById('loader').classList.remove('show');
-      phones.push(phone);
-      localStorage.setItem('mati_phones', JSON.stringify(phones));
-      localStorage.setItem('mati_count', String(count));
-      afterSubmit(primary.enrolleeName || primary.guardianName || '', phone);
-    })
-    .catch(() => {
-      // GET failed (offline?) — skip duplicate check, post anyway
-      fetch(SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      }).catch(() => {});
-      document.getElementById('loader').classList.remove('show');
-      phones.push(phone);
-      localStorage.setItem('mati_phones', JSON.stringify(phones));
-      localStorage.setItem('mati_count', String(count));
-      afterSubmit(primary.enrolleeName || primary.guardianName || '', phone);
-    });
+  // Fire and forget — no-cors POST always works from any origin
+  fetch(SCRIPT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: params.toString()
+  }).catch(() => {});
+
+  // Small delay to ensure fetch is dispatched before proceeding
+  setTimeout(() => {
+    document.getElementById('loader').classList.remove('show');
+    phones.push(phone);
+    localStorage.setItem('mati_phones', JSON.stringify(phones));
+    localStorage.setItem('mati_count', String(count));
+    submitting = false;
+    const btn = document.getElementById('submitBtn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit & Spin the Wheel 🎡'; }
+    afterSubmit(primary.enrolleeName || primary.guardianName || '', phone);
+  }, 800);
 }
 
 function showDuplicateScreen() {
@@ -863,29 +855,15 @@ function afterSubmit(name, phone) {
   });
 }
 
-// ── LOAD PRIZE DATA FROM SHEET ──
+// ── LOAD PRIZE DATA ──
+// Prize weights and stock are managed directly in the sheet
+// The app uses hardcoded defaults — update these before the event
+// if you want to change weights without redeploying
 function loadPrizeData(callback) {
-  // Use GET to fetch prize data — readable without CORS issues
-  const url = SCRIPT_URL + '?action=getPrizes&token=' + SECRET_TOKEN;
-  fetch(url)
-    .then(r => r.json())
-    .then(data => {
-      if (data && data.prizes) {
-        prizeData = data.prizes;
-      }
-      callback();
-    })
-    .catch(() => {
-      // Fallback — use hardcoded defaults if sheet unreachable
-      prizeData = [
-        { name:'Goodie Bag', pathwayWeight:20, trainingWeight:0,  stock:99, threshold:3 },
-        { name:'Notebook',   pathwayWeight:40, trainingWeight:20, stock:99, threshold:3 },
-        { name:'Mug',        pathwayWeight:40, trainingWeight:20, stock:99, threshold:3 },
-        { name:'Pen',        pathwayWeight:0,  trainingWeight:30, stock:99, threshold:3 },
-        { name:'Chocolate',  pathwayWeight:0,  trainingWeight:30, stock:99, threshold:3 }
-      ];
-      callback();
-    });
+  // prizeData is already set from DEFAULT_PRIZE_DATA at the top
+  // Reset to defaults each time so stock counts are fresh per session
+  prizeData = DEFAULT_PRIZE_DATA.map(p => ({ ...p }));
+  callback();
 }
 
 // ── BUILD ACTIVE SLICES FROM LIVE PRIZE DATA ──
@@ -1168,13 +1146,7 @@ function resetApp() {
 
 // Draw wheel on load
 window.addEventListener('load', () => {
-  // Draw a default wheel on load so wheel screen isn't blank
-  prizeData = ALL_PRIZES.map((name, i) => ({
-    name,
-    pathwayWeight:  [20,40,40,0,0][i],
-    trainingWeight: [0,20,20,30,30][i],
-    stock: 99, threshold: 3
-  }));
+  // Draw default wheel on load using DEFAULT_PRIZE_DATA
   activePrizes = prizeData.slice();
   buildActiveSlices();
   drawWheel(0);
