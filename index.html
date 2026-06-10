@@ -815,17 +815,6 @@ function submitForm() {
 
 
 
-  document.getElementById('loader').classList.add('show');
-
-  // Build payload — raffle code generated server-side now
-  const payload = {
-    primary: JSON.stringify(primary),
-    friend:  friendRec ? JSON.stringify(friendRec) : '',
-    token:   SECRET_TOKEN,
-    who,
-    mode
-  };
-
   // Send to Google Sheets via URL-encoded POST
   // Use a readable fetch so we can get the raffle code back
   document.getElementById('loader').classList.add('show');
