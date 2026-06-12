@@ -439,7 +439,7 @@ body{height:100%;background:var(--black);color:var(--white);font-family:'Barlow'
       <label for="f-raffle">I understand the tablet raffle draw will be announced after the event on MATI's social media.</label>
     </div>
     <div class="ferr" id="e-consent" style="margin-bottom:12px">Please agree to continue</div>
-    <button class="btn btn-red" style="margin-top:10px" onclick="submitForm()">Submit & Spin the Wheel 🎡</button>
+    <button class="btn btn-red" id="submitBtn" style="margin-top:10px" onclick="submitForm()">Submit & Spin the Wheel 🎡</button>
 
   </div>
 </div>
@@ -567,11 +567,11 @@ const PRIZE_COLORS = {
 // stock: how many of this prize you have physically
 // threshold: when stock hits this number, prize is removed from wheel
 const DEFAULT_PRIZE_DATA = [
-  { name:'Goodie Bag', pathwayWeight:20, trainingWeight:0,  stock:10, threshold:3 },
-  { name:'Notebook',   pathwayWeight:40, trainingWeight:20, stock:20, threshold:3 },
-  { name:'Mug',        pathwayWeight:40, trainingWeight:20, stock:20, threshold:3 },
-  { name:'Pen',        pathwayWeight:0,  trainingWeight:30, stock:25, threshold:3 },
-  { name:'Chocolate',  pathwayWeight:0,  trainingWeight:30, stock:25, threshold:3 }
+  { name:'Goodie Bag', pathwayWeight:30, trainingWeight:0,  stock:10, threshold:3 },
+  { name:'Notebook',   pathwayWeight:35, trainingWeight:30, stock:100, threshold:3 },
+  { name:'Mug',        pathwayWeight:35, trainingWeight:30, stock:100, threshold:3 },
+  { name:'Pen',        pathwayWeight:0,  trainingWeight:20, stock:100, threshold:3 },
+  { name:'Chocolate',  pathwayWeight:0,  trainingWeight:20, stock:100, threshold:3 }
 ];
 
 let prizeData    = DEFAULT_PRIZE_DATA.map(p => ({ ...p })); // working copy
@@ -712,6 +712,11 @@ function submitForm() {
   if (submitting) return; // prevent double tap
   const btn = document.getElementById('submitBtn');
   if (btn) { btn.disabled = true; btn.textContent = 'Submitting…'; }
+  // Guard — who must be set
+  if (!who) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit & Spin the Wheel 🎡'; }
+    return;
+  }
   clearErrs();
   let ok = true;
   let phone = '';
@@ -729,7 +734,11 @@ function submitForm() {
       ok &= v('s-pemail','e-s-pemail', isEmail);
     }
     phone = document.getElementById('s-phone').value.trim().replace(/\s/g,'');
-    if (phones.includes(phone)) { showDuplicateScreen(); return; }
+    if (phones.includes(phone)) {
+      const btn = document.getElementById('submitBtn');
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit & Spin the Wheel 🎡'; }
+      showDuplicateScreen(); return;
+    }
   }
 
 
@@ -742,13 +751,21 @@ function submitForm() {
     ok &= v('p-cyear','e-p-cyear', x => x !== '');
     ok &= v('p-prog','e-p-prog', x => x !== '');
     phone = document.getElementById('p-phone').value.trim().replace(/\s/g,'');
-    if (phones.includes(phone)) { showDuplicateScreen(); return; }
+    if (phones.includes(phone)) {
+      const btn = document.getElementById('submitBtn');
+      if (btn) { btn.disabled = false; btn.textContent = 'Submit & Spin the Wheel 🎡'; }
+      showDuplicateScreen(); return;
+    }
   }
 
 
 
   ok &= vCheck('f-consent','e-consent');
-  if (!ok) return;
+  if (!ok) {
+    const btn = document.getElementById('submitBtn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit & Spin the Wheel 🎡'; }
+    return;
+  }
 
   // Raffle code is now generated server-side
   // count kept locally only as fallback
@@ -792,10 +809,6 @@ function submitForm() {
     primary.guardianPhone = g('p-phone');
     primary.guardianEmail = g('p-email');
   }
-
-  // Send to Google Sheets via URL-encoded POST
-  // Use a readable fetch so we can get the raffle code back
-  document.getElementById('loader').classList.add('show');
 
   const params = new URLSearchParams();
   params.append('primary', JSON.stringify(primary));
@@ -1116,7 +1129,7 @@ function launchConfetti() {
 // RESET
 // ═══════════════════════════════════
 function resetApp() {
-  who=''; mode=''; interest=''; wheelSpun=false; wheelAngle=0; wonPrize=''; currentRaffleCode='';
+  who=''; mode='self'; interest=''; wheelSpun=false; wheelAngle=0; wonPrize=''; currentRaffleCode=''; spinning=false; submitting=false;
   hist=[];
   // Reset interest buttons
   document.getElementById('ib-pathway').classList.remove('active');
