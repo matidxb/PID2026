@@ -567,11 +567,11 @@ const PRIZE_COLORS = {
 // stock: how many of this prize you have physically
 // threshold: when stock hits this number, prize is removed from wheel
 const DEFAULT_PRIZE_DATA = [
-  { name:'Goodie Bag', pathwayWeight:20, trainingWeight:0,  stock:10, threshold:3 },
+  { name:'Goodie Bag', pathwayWeight:10, trainingWeight:0,  stock:10, threshold:3 },
   { name:'Notebook',   pathwayWeight:30, trainingWeight:30, stock:100, threshold:3 },
   { name:'Mug',        pathwayWeight:0, trainingWeight:0, stock:100, threshold:3 },
   { name:'Pen',        pathwayWeight:40,  trainingWeight:50, stock:100, threshold:3 },
-  { name:'Chocolate',  pathwayWeight:10,  trainingWeight:20, stock:100, threshold:3 }
+  { name:'Chocolate',  pathwayWeight:20,  trainingWeight:20, stock:100, threshold:3 }
 ];
 
 let prizeData    = DEFAULT_PRIZE_DATA.map(p => ({ ...p })); // working copy
